@@ -1,24 +1,40 @@
 from flask import Flask, request, jsonify
-import pandas as pd
 import requests
 from statsmodels.tsa.stattools import adfuller
 import io
+import csv
+import numpy as np # Import numpy for array conversion
 
 app = Flask(__name__)
 
-def fetch_csv_data(url):
-    """Fetches CSV data from a given URL and returns it as a pandas DataFrame."""
+def fetch_csv_data_no_pandas(url):
+    """
+    Fetches CSV data from a given URL and returns prices as a numpy array.
+    Assumes CSV format: Date, Symbol, Price (no header row).
+    """
     try:
         response = requests.get(url)
         response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
         csv_content = io.StringIO(response.text)
-        # Assuming no header, and columns are Date, Symbol, Price
-        df = pd.read_csv(csv_content, header=None, names=['Date', 'Symbol', 'Price'])
-        df['Date'] = pd.to_datetime(df['Date'])
-        df['Price'] = pd.to_numeric(df['Price'], errors='coerce') # Coerce errors to NaN
-        df.dropna(subset=['Price'], inplace=True) # Drop rows where price is NaN
-        df = df.sort_values(by='Date') # Ensure data is sorted by date
-        return df
+
+        reader = csv.reader(csv_content)
+        prices = []
+        for row in reader:
+            # Assuming price is the third column (index 2)
+            if len(row) > 2:
+                try:
+                    price = float(row[2])
+                    prices.append(price)
+                except ValueError:
+                    # Skip rows with non-numeric price values
+                    print(f"Skipping non-numeric price value: {row[2]}")
+                    continue
+        
+        if not prices:
+            print(f"No valid numerical data found for URL: {url}")
+            return None
+
+        return np.array(prices)
     except requests.exceptions.RequestException as e:
         print(f"Error fetching data from {url}: {e}")
         return None
@@ -28,8 +44,8 @@ def fetch_csv_data(url):
 
 def perform_adf_test_logic(series, stock_name):
     """Performs the Augmented Dickey-Fuller test on a time series and returns results."""
-    if series.empty:
-        return {"error": f"No valid price data for {stock_name}."}
+    if series is None or series.size == 0:
+        return {"error": f"No valid price data for {stock_name} to perform ADF test."}
 
     try:
         result = adfuller(series)
@@ -62,17 +78,17 @@ def adf_test_endpoint():
     if not tcs_url or not hcl_url:
         return jsonify({"error": "Missing TCS or HCLTECH CSV URLs"}), 400
 
-    tcs_df = fetch_csv_data(tcs_url)
-    hcl_df = fetch_csv_data(hcl_url)
+    tcs_prices = fetch_csv_data_no_pandas(tcs_url)
+    hcl_prices = fetch_csv_data_no_pandas(hcl_url)
 
     results = {}
-    if tcs_df is not None:
-        results['tcs'] = perform_adf_test_logic(tcs_df['Price'], "TCS.NS")
+    if tcs_prices is not None:
+        results['tcs'] = perform_adf_test_logic(tcs_prices, "TCS.NS")
     else:
         results['tcs'] = {"error": "Failed to fetch or process TCS.NS data."}
 
-    if hcl_df is not None:
-        results['hcltech'] = perform_adf_test_logic(hcl_df['Price'], "HCLTECH.NS")
+    if hcl_prices is not None:
+        results['hcltech'] = perform_adf_test_logic(hcl_prices, "HCLTECH.NS")
     else:
         results['hcltech'] = {"error": "Failed to fetch or process HCLTECH.NS data."}
 
