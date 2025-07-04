@@ -1,18 +1,12 @@
 import requests
-from statsmodels.tsa.stattools import adfuller
 import io
 import csv
 import numpy as np
-import json # Import json for manual JSON parsing and serialization
+import json
+from arch.unitroot import ADF # Import ADF from arch
 
-# This is the entry point for Vercel Serverless Functions
-# The 'event' parameter contains the request details (headers, body, etc.)
-# The 'context' parameter contains environment information (not used here)
 def handler(event, context):
     try:
-        # Parse the incoming JSON body from the event
-        # Vercel's event structure puts the request body in event['body']
-        # and it's usually a string that needs to be parsed.
         if 'body' not in event or not event['body']:
             return {
                 'statusCode': 400,
@@ -48,7 +42,7 @@ def handler(event, context):
         return {
             'statusCode': 200,
             'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps(results) # Manually serialize results to JSON string
+            'body': json.dumps(results)
         }
 
     except json.JSONDecodeError:
@@ -72,19 +66,17 @@ def fetch_csv_data_no_pandas(url):
     """
     try:
         response = requests.get(url)
-        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
+        response.raise_for_status()
         csv_content = io.StringIO(response.text)
 
         reader = csv.reader(csv_content)
         prices = []
         for row in reader:
-            # Assuming price is the third column (index 2)
             if len(row) > 2:
                 try:
                     price = float(row[2])
                     prices.append(price)
                 except ValueError:
-                    # Skip rows with non-numeric price values
                     print(f"Skipping non-numeric price value: {row[2]}")
                     continue
         
@@ -101,26 +93,40 @@ def fetch_csv_data_no_pandas(url):
         return None
 
 def perform_adf_test_logic(series, stock_name):
-    """Performs the Augmented Dickey-Fuller test on a time series and returns results."""
+    """Performs the Augmented Dickey-Fuller test on a time series using arch and returns results."""
     if series is None or series.size == 0:
         return {"error": f"No valid price data for {stock_name} to perform ADF test."}
 
     try:
-        result = adfuller(series)
-        p_value = result[1]
+        # Use arch.unitroot.ADF
+        # The default regression is 'c' (constant), which is common.
+        # You can specify 'ct' (constant and trend) or 'ctt' (constant, trend, and quadratic trend)
+        # if your data suggests it.
+        adf = ADF(series) 
+        
+        p_value = adf.pvalue
         is_stationary = p_value <= 0.05
 
         conclusion = ""
         if is_stationary:
-            conclusion = f"The p-value ({p_value:.4f}) is less than or equal to 0.05. We reject the null hypothesis. Therefore, the time series for {stock_name} is likely stationary."
+            conclusion = f"The p-value ({p_value:.4f}) is less than or equal to 0.05. We reject the null hypothesis."
+            conclusion += f" Therefore, the time series for {stock_name} is likely stationary."
         else:
-            conclusion = f"The p-value ({p_value:.4f}) is greater than 0.05. We fail to reject the null hypothesis. Therefore, the time series for {stock_name} is likely non-stationary (has a unit root)."
+            conclusion = f"The p-value ({p_value:.4f}) is greater than 0.05. We fail to reject the null hypothesis."
+            conclusion += f" Therefore, the time series for {stock_name} is likely non-stationary (has a unit root)."
+
+        # arch.unitroot.ADF provides critical values directly
+        critical_values = {
+            '1%': f"{adf.critical_values['1%']:.4f}",
+            '5%': f"{adf.critical_values['5%']:.4f}",
+            '10%': f"{adf.critical_values['10%']:.4f}"
+        }
 
         return {
             "stockName": stock_name,
-            "adfStatistic": f"{result[0]:.4f}",
+            "adfStatistic": f"{adf.stat:.4f}", # Use adf.stat for the test statistic
             "pValue": f"{p_value:.4f}",
-            "criticalValues": {k: f"{v:.4f}" for k, v in result[4].items()},
+            "criticalValues": critical_values,
             "isStationary": is_stationary,
             "conclusion": conclusion
         }
