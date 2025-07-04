@@ -1,11 +1,69 @@
-from flask import Flask, request, jsonify
 import requests
 from statsmodels.tsa.stattools import adfuller
 import io
 import csv
-import numpy as np # Import numpy for array conversion
+import numpy as np
+import json # Import json for manual JSON parsing and serialization
 
-app = Flask(__name__)
+# This is the entry point for Vercel Serverless Functions
+# The 'event' parameter contains the request details (headers, body, etc.)
+# The 'context' parameter contains environment information (not used here)
+def handler(event, context):
+    try:
+        # Parse the incoming JSON body from the event
+        # Vercel's event structure puts the request body in event['body']
+        # and it's usually a string that needs to be parsed.
+        if 'body' not in event or not event['body']:
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({"error": "Request body is missing."})
+            }
+        
+        data = json.loads(event['body'])
+        tcs_url = data.get('tcs_url')
+        hcl_url = data.get('hcl_url')
+
+        if not tcs_url or not hcl_url:
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({"error": "Missing TCS or HCLTECH CSV URLs"})
+            }
+
+        tcs_prices = fetch_csv_data_no_pandas(tcs_url)
+        hcl_prices = fetch_csv_data_no_pandas(hcl_url)
+
+        results = {}
+        if tcs_prices is not None:
+            results['tcs'] = perform_adf_test_logic(tcs_prices, "TCS.NS")
+        else:
+            results['tcs'] = {"error": "Failed to fetch or process TCS.NS data."}
+
+        if hcl_prices is not None:
+            results['hcltech'] = perform_adf_test_logic(hcl_prices, "HCLTECH.NS")
+        else:
+            results['hcltech'] = {"error": "Failed to fetch or process HCLTECH.NS data."}
+
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps(results) # Manually serialize results to JSON string
+        }
+
+    except json.JSONDecodeError:
+        return {
+            'statusCode': 400,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({"error": "Invalid JSON in request body."})
+        }
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({"error": f"Internal Server Error: {str(e)}"})
+        }
 
 def fetch_csv_data_no_pandas(url):
     """
@@ -68,32 +126,3 @@ def perform_adf_test_logic(series, stock_name):
         }
     except Exception as e:
         return {"error": f"Error performing ADF test for {stock_name}: {str(e)}"}
-
-@app.route('/api/adf-test', methods=['POST'])
-def adf_test_endpoint():
-    data = request.get_json()
-    tcs_url = data.get('tcs_url')
-    hcl_url = data.get('hcl_url')
-
-    if not tcs_url or not hcl_url:
-        return jsonify({"error": "Missing TCS or HCLTECH CSV URLs"}), 400
-
-    tcs_prices = fetch_csv_data_no_pandas(tcs_url)
-    hcl_prices = fetch_csv_data_no_pandas(hcl_url)
-
-    results = {}
-    if tcs_prices is not None:
-        results['tcs'] = perform_adf_test_logic(tcs_prices, "TCS.NS")
-    else:
-        results['tcs'] = {"error": "Failed to fetch or process TCS.NS data."}
-
-    if hcl_prices is not None:
-        results['hcltech'] = perform_adf_test_logic(hcl_prices, "HCLTECH.NS")
-    else:
-        results['hcltech'] = {"error": "Failed to fetch or process HCLTECH.NS data."}
-
-    return jsonify(results)
-
-# This block is for local development only. Vercel handles routing in production.
-if __name__ == '__main__':
-    app.run(debug=True, port=5328)
