@@ -75,25 +75,6 @@ def adf_test(series, lags=0):
     # unless 'lags' is used to truncate the series for the main regression.
     # A full ADF with lagged differences would be significantly more complex to implement from scratch.
 
-    # Truncate to match lag for the main regression (if lags > 0, it's for the dependent variable)
-    # This interpretation of 'lags' is simplified for a pure Python implementation.
-    # In statsmodels/arch, 'lags' refers to the number of lagged differences included.
-    # Here, we'll just ensure the series are aligned after differencing.
-    
-    # If lags > 0, we'd typically include lagged differences of `diff`.
-    # For this simplified pure Python version, we'll just ensure the series are long enough.
-    
-    # The core regression is `diff` on `y_lag`.
-    # We need to ensure `y_lag` and `diff` are of the same length for OLS.
-    # `diff` has length n-1, `y_lag` has length n-1.
-    
-    # If lags are specified, we need to adjust the series for the regression
-    # to account for the lagged differences. This is the most complex part
-    # of a pure Python ADF. For simplicity, let's assume `lags` here
-    # refers to the number of initial observations to drop to align series
-    # if we were to include lagged differences.
-    # For a basic ADF (no lagged differences), `lags=0` is effectively what we're doing.
-
     # Let's stick to the basic regression: dy = alpha + beta * y_lag
     # The `lags` parameter in the original `adf_test.py` was used to truncate.
     # We'll use it to ensure enough data points after differencing and potential truncation.
