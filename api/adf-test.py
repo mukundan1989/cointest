@@ -98,10 +98,6 @@ def perform_adf_test_logic(series, stock_name):
         return {"error": f"No valid price data for {stock_name} to perform ADF test."}
 
     try:
-        # Use arch.unitroot.ADF
-        # The default regression is 'c' (constant), which is common.
-        # You can specify 'ct' (constant and trend) or 'ctt' (constant, trend, and quadratic trend)
-        # if your data suggests it.
         adf = ADF(series) 
         
         p_value = adf.pvalue
@@ -115,7 +111,6 @@ def perform_adf_test_logic(series, stock_name):
             conclusion = f"The p-value ({p_value:.4f}) is greater than 0.05. We fail to reject the null hypothesis."
             conclusion += f" Therefore, the time series for {stock_name} is likely non-stationary (has a unit root)."
 
-        # arch.unitroot.ADF provides critical values directly
         critical_values = {
             '1%': f"{adf.critical_values['1%']:.4f}",
             '5%': f"{adf.critical_values['5%']:.4f}",
@@ -124,7 +119,7 @@ def perform_adf_test_logic(series, stock_name):
 
         return {
             "stockName": stock_name,
-            "adfStatistic": f"{adf.stat:.4f}", # Use adf.stat for the test statistic
+            "adfStatistic": f"{adf.stat:.4f}",
             "pValue": f"{p_value:.4f}",
             "criticalValues": critical_values,
             "isStationary": is_stationary,
