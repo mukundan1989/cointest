@@ -1,2 +1,3 @@
-numpy
-arch
+# requirements.txt
+numpy==1.26.4 # Or the latest stable version you tested
+arch==6.3.0   # Or the latest stable version you tested
