@@ -1,2 +1,3 @@
 requests==2.31.0
-statsmodels==0.14.0
+numpy==1.23.5 # Pinning to a slightly older, potentially smaller version
+arch==6.3.0 # A recent stable version that should work well
